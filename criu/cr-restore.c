@@ -224,9 +224,13 @@ static int restore_switch_stage(int next_stage)
 static int restore_finish_ns_stage(int from, int to)
 {
 	if (root_ns_mask)
+	{
+		pr_info("restore_finish_stage unlock\n");
 		return restore_finish_stage(task_entries, from);
+	}
 
 	/* Nobody waits for this stage change, just go ahead */
+	pr_info("restore_switch_stage_nw\n");
 	__restore_switch_stage_nw(to);
 	return 0;
 }
@@ -2309,7 +2313,8 @@ static int restore_root_task(struct pstree_item *init)
 		 * the '--empty-ns net' mode no iptables C/R is done and we
 		 * need to return these rules by hands.
 		 */
-		ret = network_lock_internal();
+		// ret = network_lock_internal();
+		ret = 0;
 		if (ret)
 			goto out_kill;
 	}
@@ -2374,13 +2379,15 @@ skip_ns_bouncing:
 	if (depopulate_roots_yard(mnt_ns_fd, false))
 		goto out_kill;
 
-	close_safe(&mnt_ns_fd);
+
+	
 
 	if (write_restored_pid())
 		goto out_kill;
 
+
 	/* Unlock network before disabling repair mode on sockets */
-	network_unlock();
+	// network_unlock();
 
 	/*
 	 * Stop getting sigchld, after we resume the tasks they
@@ -2438,6 +2445,7 @@ skip_ns_bouncing:
 	pr_info("Restore finished successfully. Tasks resumed.\n");
 	write_stats(RESTORE_STATS);
 
+	close_safe(&mnt_ns_fd);
 	/* This has the effect of dismissing the image streamer */
 	close_image_dir();
 

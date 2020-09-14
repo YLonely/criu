@@ -33,17 +33,17 @@ int open_detach_mount(char *dir)
 	if (fd < 0)
 		__pr_perror("Can't open directory %s: %d", dir, fd);
 
-	ret = __sys(umount2)(dir, MNT_DETACH);
-	if (ret) {
-		__pr_perror("Can't detach mount %s: %d", dir, ret);
-		goto err_close;
-	}
+	// ret = __sys(umount2)(dir, MNT_DETACH);
+	// if (ret) {
+	// 	__pr_perror("Can't detach mount %s: %d", dir, ret);
+	// 	goto err_close;
+	// }
 
-	ret = __sys(rmdir)(dir);
-	if (ret) {
-		__pr_perror("Can't remove tmp dir %s: %d", dir, ret);
-		goto err_close;
-	}
+	// ret = __sys(rmdir)(dir);
+	// if (ret) {
+	// 	__pr_perror("Can't remove tmp dir %s: %d", dir, ret);
+	// 	goto err_close;
+	// }
 
 	return fd;
 

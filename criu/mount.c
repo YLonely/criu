@@ -2736,23 +2736,22 @@ static int cr_pivot_root(char *root)
 
 	exit_code = 0;
 
-	if (umount2(put_root, MNT_DETACH)) {
-		pr_perror("Can't umount %s", put_root);
-		return -1;
-	}
+	// if (umount2(put_root, MNT_DETACH)) {
+	// 	pr_perror("Can't umount %s", put_root);
+	// 	return -1;
+	// }
 
 err_tmpfs:
-	if (umount2(put_root, MNT_DETACH)) {
-		pr_perror("Can't umount %s", put_root);
-		return -1;
-	}
+	// if (umount2(put_root, MNT_DETACH)) {
+	// 	pr_perror("Can't umount %s", put_root);
+	// 	return -1;
+	// }
 
 err_root:
-	if (tmp_dir && rmdir(put_root)) {
-		pr_perror("Can't remove the directory %s", put_root);
-		return -1;
-	}
-
+	// if (tmp_dir && rmdir(put_root)) {
+	// 	pr_perror("Can't remove the directory %s", put_root);
+	// 	return -1;
+	// }
 	return exit_code;
 }
 
@@ -3250,13 +3249,13 @@ static int populate_mnt_ns(void)
 		return -1;
 
 	ret = mnt_tree_for_each(root_yard_mp, do_mount_one);
-	mnt_tree_for_each(root_yard_mp, do_close_one);
+	// mnt_tree_for_each(root_yard_mp, do_close_one);
 
 	if (ret == 0 && fixup_remap_mounts())
 		return -1;
 
-	if (umount_clean_path())
-		return -1;
+	// if (umount_clean_path())
+	// 	return -1;
 	return ret;
 }
 
@@ -3277,15 +3276,15 @@ static int __depopulate_roots_yard(void)
 	 * Don't worry about MNT_DETACH, because files are restored after this
 	 * and nobody will not be restored from a wrong mount namespace.
 	 */
-	if (umount2(mnt_roots, MNT_DETACH)) {
-		pr_perror("Can't unmount %s", mnt_roots);
-		ret = -1;
-	}
+	// if (umount2(mnt_roots, MNT_DETACH)) {
+	// 	pr_perror("Can't unmount %s", mnt_roots);
+	// 	ret = -1;
+	// }
 
-	if (rmdir(mnt_roots)) {
-		pr_perror("Can't remove the directory %s", mnt_roots);
-		ret = -1;
-	}
+	// if (rmdir(mnt_roots)) {
+	// 	pr_perror("Can't remove the directory %s", mnt_roots);
+	// 	ret = -1;
+	// }
 
 	return ret;
 }
@@ -3441,7 +3440,9 @@ int prepare_mnt_ns(void)
 			goto err;
 
 		/* root fd is used to restore file mappings */
+		pr_info("open proc\n");
 		fd = open_proc(PROC_SELF, "root");
+		pr_info("open finish\n");
 		if (fd < 0)
 			goto err;
 		nsid->mnt.root_fd_id = fdstore_add(fd);
