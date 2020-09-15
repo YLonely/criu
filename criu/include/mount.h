@@ -111,6 +111,7 @@ extern int open_mountpoint(struct mount_info *pm);
 
 extern struct mount_info *collect_mntinfo(struct ns_id *ns, bool for_dump);
 extern int prepare_mnt_ns(void);
+extern int prepare_mnt_ns_for_container(void);
 
 extern int pivot_root(const char *new_root, const char *put_old);
 

@@ -2808,15 +2808,15 @@ static int create_mnt_roots(void)
 	if (mnt_roots)
 		return 0;
 
-	mnt_roots = xstrdup("/tmp/.criu.mntns.XXXXXX");
+	mnt_roots = xstrdup("/tmp/.criu.mntns.abcdef");
 	if (mnt_roots == NULL)
 		goto out;
 
-	if (mkdtemp(mnt_roots) == NULL) {
-		pr_perror("Unable to create a temporary directory");
-		mnt_roots = NULL;
-		goto out;
-	}
+	// if (mkdtemp(mnt_roots) == NULL) {
+	// 	pr_perror("Unable to create a temporary directory");
+	// 	mnt_roots = NULL;
+	// 	goto out;
+	// }
 	chmod(mnt_roots, 0777);
 
 	exit_code = 0;
@@ -3323,8 +3323,8 @@ int depopulate_roots_yard(int mntns_fd, bool only_ghosts)
 	if (try_clean_remaps(only_ghosts))
 		ret = -1;
 
-	if (__depopulate_roots_yard())
-		ret = -1;
+	// if (__depopulate_roots_yard())
+	// 	ret = -1;
 
 	if (setns(old_ns, CLONE_NEWNS) < 0) {
 		pr_perror("Fail to switch back!");
@@ -3348,6 +3348,86 @@ void cleanup_mnt_ns(void)
 
 	if (rmdir(mnt_roots))
 		pr_perror("Can't remove the directory %s", mnt_roots);
+}
+
+int prepare_mnt_ns_for_container(void)
+{
+	int ret = -1, rst = -1, fd;
+	struct ns_id *nsid;
+	if (!(root_ns_mask & CLONE_NEWNS))
+		return 0;
+
+	pr_info("Restoring mount namespace for container\n");
+	rst = open("/proc/3001/ns/mnt", O_RDONLY);
+	if (rst < 0)
+	{
+		pr_err("can't open ns/mnt of 3001\n");
+		return -1;
+	}
+	pr_info("set ns start\n");
+	if (setns(rst, CLONE_NEWNS))
+	{
+		pr_err("can't enter namespace");
+		return -1;
+	}
+	pr_info("set ns done\n");
+
+	for (nsid = ns_ids; nsid != NULL; nsid = nsid->next)
+	{
+		char path[PATH_MAX];
+
+		if (nsid->nd != &mnt_ns_desc)
+			continue;
+
+		// print_ns_root(nsid, 0, path, sizeof(path) - 1);
+		// //create path
+		// if (mkdir(path, 0600))
+		// {
+		// 	pr_err("cant create path %s\n", path);
+		// 	return -1;
+		// }
+
+		// if (mount("/root/test/cs-test/container1", path, NULL, MS_BIND | MS_REC, NULL))
+		// {
+		// 	pr_err("can't mount rootfs with errno %d\n", errno);
+		// 	return -1;
+		// }
+		//change root
+		if(chroot("/tmp/.criu.mntns.abcdef/13-0000000000/")){
+			pr_err("cant change root\n");
+			return -1;
+		}
+		//mount proc
+		if (mount("proc", "/proc", "proc", 0, NULL))
+		{
+			pr_err("cant mount proc");
+			return -1;
+		}
+
+		/* Pin one with a file descriptor */
+		nsid->mnt.nsfd_id = fdstore_add(rst);
+		close(rst);
+		if (nsid->mnt.nsfd_id < 0)
+		{
+			pr_err("Can't add ns fd\n");
+			return -1;
+		}
+
+		/* root fd is used to restore file mappings */
+		fd = open_proc(PROC_SELF, "root");
+		if (fd < 0)
+			return -1;
+		nsid->mnt.root_fd_id = fdstore_add(fd);
+		if (nsid->mnt.root_fd_id < 0)
+		{
+			pr_err("Can't add root fd\n");
+			close(fd);
+			return -1;
+		}
+		close(fd);
+	}
+
+	return 0;	
 }
 
 int prepare_mnt_ns(void)
@@ -3385,26 +3465,27 @@ int prepare_mnt_ns(void)
 
 		free_mntinfo(old);
 	}
+	rst = open_proc(PROC_SELF, "ns/mnt");
+	if (rst < 0)
+		return -1;
 
 	ret = populate_mnt_ns();
 	if (ret)
 		return -1;
 
-	rst = open_proc(PROC_SELF, "ns/mnt");
-	if (rst < 0)
-		return -1;
-
 	/* restore non-root namespaces */
 	for (nsid = ns_ids; nsid != NULL; nsid = nsid->next) {
-		char path[PATH_MAX];
 
+		char path[PATH_MAX];
 		if (nsid->nd != &mnt_ns_desc)
 			continue;
 		/* Create the new mount namespace */
+		pr_info("unshare 3 start\n");
 		if (unshare(CLONE_NEWNS)) {
 			pr_perror("Unable to create a new mntns");
 			goto err;
 		}
+		pr_info("unshare 3 end\n");
 
 		fd = open_proc(PROC_SELF, "ns/mnt");
 		if (fd < 0)
@@ -3419,10 +3500,20 @@ int prepare_mnt_ns(void)
 			 * namespace, because there are file descriptors
 			 * linked with it (e.g. to bind-mount slave pty-s).
 			 */
-			if (setns(rst, CLONE_NEWNS)) {
-				pr_perror("Can't restore mntns back");
+			// pr_info("set ns start\n");
+			// if (setns(rst, CLONE_NEWNS)) {
+			// 	pr_perror("Can't restore mntns back");
+			// 	goto err;
+			// }
+			// pr_info("set ns end\n");
+			unshare(CLONE_NEWNS);
+			pr_info("unshare 4 end\n");
+			if (setns(rst, CLONE_NEWNS))
+			{
+				pr_perror("error\n");
 				goto err;
 			}
+			pr_info("setns 4 end\n");
 			SWAP(rst, fd);
 		}
 
@@ -3440,9 +3531,7 @@ int prepare_mnt_ns(void)
 			goto err;
 
 		/* root fd is used to restore file mappings */
-		pr_info("open proc\n");
 		fd = open_proc(PROC_SELF, "root");
-		pr_info("open finish\n");
 		if (fd < 0)
 			goto err;
 		nsid->mnt.root_fd_id = fdstore_add(fd);
@@ -3454,10 +3543,12 @@ int prepare_mnt_ns(void)
 		close(fd);
 
 		/* And return back to regain the access to the roots yard */
+		pr_info("regain back start\n");
 		if (setns(rst, CLONE_NEWNS)) {
 			pr_perror("Can't restore mntns back");
 			goto err;
 		}
+		pr_info("regain back end\n");
 	}
 	close(rst);
 
