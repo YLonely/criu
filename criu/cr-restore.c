@@ -1488,11 +1488,13 @@ static inline int fork_with_pid(struct pstree_item *item)
 			}
 		}
 	}
+	if (likely(item != root_item))
+		clone_flags &= ~CLONE_NEWNET;
 
 	if (kdat.has_clone3_set_tid) {
 		ret = clone3_with_pid_noasan(restore_task_with_children,
 				&ca, (clone_flags &
-					~(CLONE_NEWNET | CLONE_NEWCGROUP | CLONE_NEWTIME)),
+					~(CLONE_NEWCGROUP | CLONE_NEWTIME)),
 				SIGCHLD, pid);
 	} else {
 		/*
@@ -1510,7 +1512,7 @@ static inline int fork_with_pid(struct pstree_item *item)
 		close_pid_proc();
 		ret = clone_noasan(restore_task_with_children,
 				(clone_flags &
-				 ~(CLONE_NEWNET | CLONE_NEWCGROUP | CLONE_NEWTIME)) | SIGCHLD,
+				 ~(CLONE_NEWCGROUP | CLONE_NEWTIME)) | SIGCHLD,
 				&ca);
 	}
 
@@ -1784,6 +1786,7 @@ static int restore_task_with_children(void *_arg)
 	int ret;
 
 	current = ca->item;
+	pr_info("child start here\n");
 
 	if (current != root_item) {
 		char buf[12];
@@ -1816,22 +1819,25 @@ static int restore_task_with_children(void *_arg)
 	if (log_init_by_pid(vpid(current)))
 		return -1;
 
+
 	if (current->parent == NULL) {
 		/*
 		 * The root task has to be in its namespaces before executing
 		 * ACT_SETUP_NS scripts, so the root netns has to be created here
 		 */
-		if (root_ns_mask & CLONE_NEWNET) {
-			struct ns_id *ns = net_get_root_ns();
-			if (ns->ext_key)
-				ret = net_set_ext(ns);
-			else
-				ret = unshare(CLONE_NEWNET);
-			if (ret) {
-				pr_perror("Can't unshare net-namespace");
-				goto err;
-			}
-		}
+		// if (root_ns_mask & CLONE_NEWNET) {
+		// 	struct ns_id *ns = net_get_root_ns();
+		// 	if (ns->ext_key){
+		// 		ret = net_set_ext(ns);
+		// 	}
+		// 	else{
+		// 		ret = unshare(CLONE_NEWNET);
+		// 	}
+		// 	if (ret) {
+		// 		pr_perror("Can't unshare net-namespace");
+		// 		goto err;
+		// 	}
+		// }
 
 		if (root_ns_mask & CLONE_NEWTIME) {
 			if (prepare_timens(current->ids->time_ns_id))
@@ -2203,11 +2209,11 @@ static int restore_root_task(struct pstree_item *init)
 	int root_seized = 0;
 	struct pstree_item *item;
 
-	ret = run_scripts(ACT_PRE_RESTORE);
-	if (ret != 0) {
-		pr_err("Aborting restore due to pre-restore script ret code %d\n", ret);
-		return -1;
-	}
+	// ret = run_scripts(ACT_PRE_RESTORE);
+	// if (ret != 0) {
+	// 	pr_err("Aborting restore due to pre-restore script ret code %d\n", ret);
+	// 	return -1;
+	// }
 
 	fd = open("/proc", O_DIRECTORY | O_RDONLY);
 	if (fd < 0) {
@@ -2319,9 +2325,9 @@ static int restore_root_task(struct pstree_item *init)
 			goto out_kill;
 	}
 
-	ret = run_scripts(ACT_POST_SETUP_NS);
-	if (ret)
-		goto out_kill;
+	// ret = run_scripts(ACT_POST_SETUP_NS);
+	// if (ret)
+	// 	goto out_kill;
 
 	__restore_switch_stage(CR_STATE_FORKING);
 
@@ -2429,9 +2435,9 @@ skip_ns_bouncing:
 
 	finalize_restore();
 
-	ret = run_scripts(ACT_PRE_RESUME);
-	if (ret)
-		pr_err("Pre-resume script ret code %d\n", ret);
+	// ret = run_scripts(ACT_PRE_RESUME);
+	// if (ret)
+	// 	pr_err("Pre-resume script ret code %d\n", ret);
 
 	if (restore_freezer_state())
 		pr_err("Unable to restore freezer state\n");
@@ -2449,9 +2455,9 @@ skip_ns_bouncing:
 	/* This has the effect of dismissing the image streamer */
 	close_image_dir();
 
-	ret = run_scripts(ACT_POST_RESUME);
-	if (ret != 0)
-		pr_err("Post-resume script ret code %d\n", ret);
+	// ret = run_scripts(ACT_POST_RESUME);
+	// if (ret != 0)
+	// 	pr_err("Post-resume script ret code %d\n", ret);
 
 	if (!opts.restore_detach && !opts.exec_cmd)
 		wait(NULL);

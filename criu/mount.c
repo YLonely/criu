@@ -3358,10 +3358,10 @@ int prepare_mnt_ns_for_container(void)
 		return 0;
 
 	pr_info("Restoring mount namespace for container\n");
-	rst = open("/proc/3001/ns/mnt", O_RDONLY);
+	rst = open("/proc/8546/ns/mnt", O_RDONLY);
 	if (rst < 0)
 	{
-		pr_err("can't open ns/mnt of 3001\n");
+		pr_err("can't open ns/mnt of 8546\n");
 		return -1;
 	}
 	pr_info("set ns start\n");

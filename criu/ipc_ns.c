@@ -924,21 +924,26 @@ static int prepare_ipc_var(int pid)
 
 int prepare_ipc_ns(int pid)
 {
-	int ret;
+	// int ret;
 
-	pr_info("Restoring IPC namespace\n");
-	ret = prepare_ipc_var(pid);
-	if (ret < 0)
-		return ret;
-	ret = prepare_ipc_shm(pid);
-	if (ret < 0)
-		return ret;
-	ret = prepare_ipc_msg(pid);
-	if (ret < 0)
-		return ret;
-	ret = prepare_ipc_sem(pid);
-	if (ret < 0)
-		return ret;
+	// pr_info("Restoring IPC namespace\n");
+	// ret = prepare_ipc_var(pid);
+	// if (ret < 0)
+	// 	return ret;
+	// ret = prepare_ipc_shm(pid);
+	// if (ret < 0)
+	// 	return ret;
+	// ret = prepare_ipc_msg(pid);
+	// if (ret < 0)
+	// 	return ret;
+	// ret = prepare_ipc_sem(pid);
+	// if (ret < 0)
+	// 	return ret;
+	pr_info("start ipc restore\n");
+	int fd = open("/proc/8823/ns/ipc", O_RDONLY);
+	setns(fd, CLONE_NEWIPC);
+	close(fd);
+	pr_info("end ipc restore\n");
 	return 0;
 }
 
