@@ -183,4 +183,6 @@ extern int parse_options(int argc, char **argv, bool *usage_error, bool *has_exe
 extern int check_options(void);
 extern void init_opts(void);
 
+#define CONTAINER_OPTIMIZED 1
+
 #endif /* __CR_OPTIONS_H__ */

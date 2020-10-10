@@ -1766,11 +1766,16 @@ int prepare_namespace(struct pstree_item *item, unsigned long clone_flags)
 	 * This one is special -- there can be several mount
 	 * namespaces and prepare_mnt_ns handles them itself.
 	 */
-	// if (prepare_mnt_ns())
-	// 	goto out;
-	if(prepare_mnt_ns_for_container())
-		goto out;
-
+	if (CONTAINER_OPTIMIZED)
+	{
+		if (prepare_mnt_ns_for_container())
+			goto out;
+	}
+	else
+	{
+		if (prepare_mnt_ns())
+			goto out;
+	}
 	ret = 0;
 out:
 	if (restore_sigmask(&sig_mask) < 0)

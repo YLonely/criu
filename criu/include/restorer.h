@@ -118,13 +118,20 @@ struct thread_restore_args {
 
 typedef long (*thread_restore_fcall_t) (struct thread_restore_args *args);
 
-struct restore_vma_io {
+struct restore_vma_io{
 	int nr_iovs;
 	loff_t off;
+	uint64_t *iov_offset;
 	struct iovec iovs[0];
 };
 
-#define RIO_SIZE(niovs)	(sizeof(struct restore_vma_io) + (niovs) * sizeof(struct iovec))
+struct iovs_offset{
+	int len;
+	uint64_t offset[0];
+};
+
+#define RIO_SIZE(niovs) (sizeof(struct restore_vma_io) + (niovs) * sizeof(struct iovec))
+#define OFFSET_SIZE(len) (sizeof(struct iovs_offset) + (len) * sizeof(uint64_t))
 
 struct task_restore_args {
 	struct thread_restore_args	*t;			/* thread group leader */
@@ -151,6 +158,7 @@ struct task_restore_args {
 
 	int				vma_ios_fd;
 	struct restore_vma_io		*vma_ios;
+	struct iovs_offset 			*offsets;
 	unsigned int			vma_ios_n;
 
 	struct restore_posix_timer	*posix_timers;

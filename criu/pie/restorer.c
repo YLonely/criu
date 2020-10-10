@@ -87,6 +87,14 @@ bool fault_injected(enum faults f)
 	return __fault_injected(f, fi_strategy);
 }
 
+struct iovs_in_range
+{
+	struct iovec *start_iov;
+	uint64_t *offset;
+	unsigned int len;
+	uint64_t last_iov_len;
+};
+
 #ifdef ARCH_HAS_LONG_PAGES
 /*
  * XXX: Make it compel's std plugin global variable. Drop parasite_size().
@@ -664,9 +672,64 @@ unsigned long arch_shmat(int shmid, void *shmaddr,
 }
 #endif
 
-static unsigned long restore_mapping(VmaEntry *vma_entry)
+static struct iovs_in_range find_iovs_in_vma_range(VmaEntry *entry, struct iovec *iovs, unsigned int *start_index, uint64_t *offset, unsigned int len)
 {
-	int prot	= vma_entry->prot;
+	uint64_t target = entry->start;
+	int left = 0, right = len - 1;
+	struct iovs_in_range empty = {
+		.start_iov = NULL,
+		.offset = NULL,
+		.len = 0,
+	};
+	int mid;
+	pr_info("\tvma range from %lx->%lx\n", entry->start, entry->end);
+	if (*start_index >= len)
+		return empty;
+	BUG_ON((uint64_t)(iovs[*start_index].iov_base) < target);
+	int l = 0;
+	unsigned int start = *start_index;
+	uint64_t last_iov_len = 0;
+	int i;
+	for (i = *start_index; i < len; i++, l++)
+	{
+		uint64_t iov_start = (uint64_t)iovs[i].iov_base;
+		uint64_t iov_end = iov_start + (uint64_t)iovs[i].iov_len;
+		if (iov_start >= entry->end)
+			break;
+		pr_info("\tiov range from %lx->%lx\n", iov_start, iov_end);
+		if (iov_end > entry->end)
+		{
+			pr_info("the last iov is out of range\n");
+			last_iov_len = entry->end - iov_start;
+			l++;
+			break;
+		}
+	}
+	*start_index = i;
+	if (last_iov_len == 0)
+		last_iov_len = iovs[start + l - 1].iov_len;
+	struct iovs_in_range ret = {
+		.start_iov = &(iovs[start]),
+		.offset = &(offset[start]),
+		.len = l,
+		.last_iov_len = last_iov_len,
+	};
+	return ret;
+}
+
+static unsigned long do_vma_map(void **addr, uint64_t len, int prot, int flags, int fd, uint64_t offset)
+{
+	pr_debug("\tmmap(%" PRIx64 " -> %" PRIx64 ", %x %x %d %ld)\n",
+			 (uint64_t)*addr, (uint64_t)*addr + len,
+			 prot, flags, fd, offset);
+	unsigned long ret = sys_mmap(*addr, len, prot, flags, fd, offset);
+	pr_info("ret:%lx\n", ret);
+	return ret;
+}
+
+static unsigned long restore_mapping(VmaEntry *vma_entry, struct iovec *iovs, unsigned int *start_index, uint64_t *offset, unsigned int iovs_len, int page_image_fd)
+{
+	int prot = vma_entry->prot;
 	int flags	= vma_entry->flags | MAP_FIXED;
 	unsigned long addr;
 
@@ -717,22 +780,88 @@ static unsigned long restore_mapping(VmaEntry *vma_entry)
 	 * that mechanism as it causes the process to be charged for memory
 	 * immediately upon mmap, not later upon preadv().
 	 */
-	pr_debug("\tmmap(%"PRIx64" -> %"PRIx64", %x %x %d)\n",
-			vma_entry->start, vma_entry->end,
-			prot, flags, (int)vma_entry->fd);
+
+	struct iovs_in_range ios = find_iovs_in_vma_range(vma_entry, iovs, start_index, offset, iovs_len);
+	if (vma_entry_is(vma_entry, VMA_FILE_SHARED) || flags & MAP_GROWSDOWN)
+	{
+		addr = do_vma_map((void *)(&vma_entry->start),
+						  vma_entry_len(vma_entry),
+						  prot, flags,
+						  vma_entry->fd,
+						  vma_entry->pgoff);
+		*start_index += ios.len;
+		return addr;
+	}
+	uint64_t start = vma_entry->start;
+	uint64_t end = vma_entry->end;
+	uint64_t ret;
+	addr = start;
+	int i;
+	for (i = 0; i < ios.len; i++)
+	{
+		uint64_t iov_start = (uint64_t)(ios.start_iov[i].iov_base);
+		if (iov_start > start)
+		{
+			ret = do_vma_map((void *)(&start),
+							 iov_start - start,
+							 prot, flags,
+							 vma_entry->fd,
+							 vma_entry->pgoff);
+			if (ret == (uint64_t)MAP_FAILED)
+			{
+				addr = ret;
+				goto err_out;
+			}
+		}
+		start = iov_start + (uint64_t)(ios.start_iov[i].iov_len);
+		//mmap pages file to memory
+		uint64_t iov_map_len = ios.start_iov[i].iov_len;
+		uint64_t iov_map_offset = ios.offset[i];
+		void *iov_map_start = ios.start_iov[i].iov_base;
+		bool intersect = false;
+		if (i == ios.len - 1 && ios.last_iov_len != ios.start_iov[i].iov_len)
+		{
+			//handle the last iov which may intersect
+			intersect = true;
+			iov_map_len = ios.last_iov_len;
+			ios.start_iov[i].iov_base += iov_map_len;
+			ios.start_iov[i].iov_len -= iov_map_len;
+			ios.offset[i] += iov_map_len;
+		}
+		ret = do_vma_map(&(iov_map_start), iov_map_len,
+						 prot | PROT_WRITE, (flags & (~MAP_ANONYMOUS)) | MAP_FIXED | MAP_PRIVATE, page_image_fd, iov_map_offset);
+		vma_entry->pgoff += iov_map_len;
+		if (ret == (uint64_t)MAP_FAILED)
+		{
+			addr = ret;
+			goto err_out;
+		}
+		if (!intersect)
+			ios.start_iov[i].iov_base = NULL;
+	}
+	if (end > start)
+	{
+		ret = do_vma_map((void *)(&start),
+						 end - start,
+						 prot, flags,
+						 vma_entry->fd,
+						 vma_entry->pgoff);
+		if (ret == (uint64_t)MAP_FAILED)
+		{
+			addr = ret;
+			goto err_out;
+		}
+	}
+
 	/*
 	 * Should map memory here. Note we map them as
 	 * writable since we're going to restore page
 	 * contents.
 	 */
-	addr = sys_mmap(decode_pointer(vma_entry->start),
-			vma_entry_len(vma_entry),
-			prot, flags,
-			vma_entry->fd,
-			vma_entry->pgoff);
 
+err_out:
 	if ((vma_entry->fd != -1) &&
-			(vma_entry->status & VMA_CLOSE))
+		(vma_entry->status & VMA_CLOSE))
 		sys_close(vma_entry->fd);
 
 	return addr;
@@ -1534,6 +1663,13 @@ long __export_restore_task(struct task_restore_args *args)
 	/*
 	 * OK, lets try to map new one.
 	 */
+
+	/*
+	* pack iovs with offset
+	*/
+	rio = args->vma_ios;
+	unsigned int iovs_start_index = 0;
+
 	for (i = 0; i < args->vmas_n; i++) {
 		vma_entry = args->vmas + i;
 
@@ -1544,7 +1680,7 @@ long __export_restore_task(struct task_restore_args *args)
 		if (vma_entry_is(vma_entry, VMA_PREMMAPED))
 			continue;
 
-		va = restore_mapping(vma_entry);
+		va = restore_mapping(vma_entry, rio->iovs, &iovs_start_index, args->offsets->offset, rio->nr_iovs, args->vma_ios_fd);
 
 		if (va != vma_entry->start) {
 			pr_err("Can't restore %"PRIx64" mapping with %lx\n", vma_entry->start, va);
@@ -1555,52 +1691,28 @@ long __export_restore_task(struct task_restore_args *args)
 	/*
 	 * Now read the contents (if any)
 	 */
+	BUG_ON(args->vma_ios_n!=1);
+	ssize_t r;
+	int read_count=0;
 
-	rio = args->vma_ios;
-	for (i = 0; i < args->vma_ios_n; i++) {
-		struct iovec *iovs = rio->iovs;
-		int nr = rio->nr_iovs;
-		ssize_t r;
-
-		while (nr) {
-			pr_debug("Preadv %lx:%d... (%d iovs)\n",
-					(unsigned long)iovs->iov_base,
-					(int)iovs->iov_len, nr);
-			r = sys_preadv(args->vma_ios_fd, iovs, nr, rio->off);
-			if (r < 0) {
-				pr_err("Can't read pages data (%d)\n", (int)r);
-				goto core_restore_end;
-			}
-
-			pr_debug("`- returned %ld\n", (long)r);
-			/* If the file is open for writing, then it means we should punch holes
-			 * in it. */
-			if (r > 0 && args->auto_dedup) {
-				int fr = sys_fallocate(args->vma_ios_fd, FALLOC_FL_KEEP_SIZE|FALLOC_FL_PUNCH_HOLE,
-					rio->off, r);
-				if (fr < 0) {
-					pr_debug("Failed to punch holes with fallocate: %d\n", fr);
+	for (i = 0; i < args->vma_ios_n; i++)
+	{
+		for (int j = 0; j < rio->nr_iovs; j++)
+		{
+			if (rio->iovs[j].iov_base != NULL)
+			{
+				read_count++;
+				pr_info("read iov from %lx->%lx\n", (unsigned long)rio->iovs[j].iov_base, (unsigned long)rio->iovs[j].iov_base + rio->iovs[j].iov_len);
+				r = sys_preadv(args->vma_ios_fd, &(rio->iovs[j]), 1, args->offsets->offset[j]);
+				if (r < 0)
+				{
+					pr_err("Can't read pages data %lx\n", (unsigned long)rio->iovs[j].iov_base);
+					goto core_restore_end;
 				}
 			}
-			rio->off += r;
-			/* Advance the iovecs */
-			do {
-				if (iovs->iov_len <= r) {
-					pr_debug("   `- skip pagemap\n");
-					r -= iovs->iov_len;
-					iovs++;
-					nr--;
-					continue;
-				}
-
-				iovs->iov_base += r;
-				iovs->iov_len -= r;
-				break;
-			} while (nr > 0);
 		}
-
-		rio = ((void *)rio) + RIO_SIZE(rio->nr_iovs);
 	}
+	pr_info("lazy proportion: %d\n", (int)((double)(rio->nr_iovs - read_count) / rio->nr_iovs * 100));
 
 	if (args->vma_ios_fd != -1)
 		sys_close(args->vma_ios_fd);

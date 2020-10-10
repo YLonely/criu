@@ -1265,12 +1265,10 @@ void fini_cgroup(void)
 
 	close_service_fd(CGROUP_YARD);
 	if (!opts.cgroup_yard) {
-		pr_info("start %s\n", cg_yard);
-		// if (umount2(cg_yard, MNT_DETACH))
-		// 	pr_perror("Unable to umount %s", cg_yard);
-		// if (rmdir(cg_yard))
-		// 	pr_perror("Unable to remove %s", cg_yard);
-		pr_info("end\n");
+		if (umount2(cg_yard, MNT_DETACH))
+			pr_perror("Unable to umount %s", cg_yard);
+		if (rmdir(cg_yard))
+			pr_perror("Unable to remove %s", cg_yard);
 	}
 	xfree(cg_yard);
 	cg_yard = NULL;

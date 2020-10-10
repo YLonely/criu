@@ -307,12 +307,13 @@ static int enqueue_async_iov(struct page_read *pr, void *buf,
 int pagemap_render_iovec(struct list_head *from, struct task_restore_args *ta)
 {
 	struct page_read_iov *piov;
+	struct restore_vma_io *rio;
+	struct iovs_offset *offsets;
 
 	ta->vma_ios = (struct restore_vma_io *)rst_mem_align_cpos(RM_PRIVATE);
 	ta->vma_ios_n = 0;
 
 	list_for_each_entry(piov, from, l) {
-		struct restore_vma_io *rio;
 
 		pr_info("`- render %d iovs (%p:%zd...)\n", piov->nr,
 				piov->to[0].iov_base, piov->to[0].iov_len);
@@ -325,6 +326,15 @@ int pagemap_render_iovec(struct list_head *from, struct task_restore_args *ta)
 		memcpy(rio->iovs, piov->to, piov->nr * sizeof(struct iovec));
 
 		ta->vma_ios_n++;
+	}
+	ta->offsets = (struct iovs_offset *)rst_mem_align_cpos(RM_PRIVATE);
+	offsets = rst_mem_alloc(OFFSET_SIZE(rio->nr_iovs), RM_PRIVATE);
+	offsets->len = rio->nr_iovs;
+	uint64_t off = rio->off;
+	for (int i = 0; i < rio->nr_iovs; i++)
+	{
+		offsets->offset[i] = off;
+		off += rio->iovs[i].iov_len;
 	}
 
 	return 0;

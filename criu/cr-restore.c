@@ -2442,13 +2442,13 @@ skip_ns_bouncing:
 	if (restore_freezer_state())
 		pr_err("Unable to restore freezer state\n");
 
-	fini_cgroup();
 
 	/* Detaches from processes and they continue run through sigreturn. */
 	if (finalize_restore_detach())
 		goto out_kill_network_unlocked;
 
 	pr_info("Restore finished successfully. Tasks resumed.\n");
+	fini_cgroup();
 	write_stats(RESTORE_STATS);
 
 	close_safe(&mnt_ns_fd);
@@ -3674,6 +3674,7 @@ static int sigreturn_restore(pid_t pid, struct task_restore_args *task_args, uns
 	RST_MEM_FIXUP_PPTR(task_args->zombies);
 	RST_MEM_FIXUP_PPTR(task_args->vma_ios);
 	RST_MEM_FIXUP_PPTR(task_args->inotify_fds);
+	RST_MEM_FIXUP_PPTR(task_args->offsets);
 
 	task_args->compatible_mode = core_is_compat(core);
 	/*

@@ -2807,16 +2807,27 @@ static int create_mnt_roots(void)
 
 	if (mnt_roots)
 		return 0;
+	if (CONTAINER_OPTIMIZED)
+	{
 
-	mnt_roots = xstrdup("/tmp/.criu.mntns.abcdef");
-	if (mnt_roots == NULL)
-		goto out;
+		mnt_roots = xstrdup("/tmp/.criu.mntns.abcdef");
+		if (mnt_roots == NULL)
+			goto out;
+	}
+	else
+	{
+		mnt_roots = xstrdup("/tmp/.criu.mntns.XXXXXX");
+		if (mnt_roots == NULL)
+			goto out;
 
-	// if (mkdtemp(mnt_roots) == NULL) {
-	// 	pr_perror("Unable to create a temporary directory");
-	// 	mnt_roots = NULL;
-	// 	goto out;
-	// }
+		if (mkdtemp(mnt_roots) == NULL)
+		{
+			pr_perror("Unable to create a temporary directory");
+			mnt_roots = NULL;
+			goto out;
+		}
+	}
+
 	chmod(mnt_roots, 0777);
 
 	exit_code = 0;
@@ -3249,13 +3260,13 @@ static int populate_mnt_ns(void)
 		return -1;
 
 	ret = mnt_tree_for_each(root_yard_mp, do_mount_one);
-	// mnt_tree_for_each(root_yard_mp, do_close_one);
+	mnt_tree_for_each(root_yard_mp, do_close_one);
 
 	if (ret == 0 && fixup_remap_mounts())
 		return -1;
 
-	// if (umount_clean_path())
-	// 	return -1;
+	if (umount_clean_path())
+	 	return -1;
 	return ret;
 }
 
@@ -3266,25 +3277,41 @@ static int __depopulate_roots_yard(void)
 	if (mnt_roots == NULL)
 		return 0;
 
-	if (mount("none", mnt_roots, "none", MS_REC|MS_PRIVATE, NULL)) {
-		pr_perror("Can't remount root with MS_PRIVATE");
-		ret = 1;
+	if (CONTAINER_OPTIMIZED)
+	{
+		char proc_dir[1024];
+		snprintf(proc_dir, sizeof(proc_dir), "%s/13-0000000000/proc", mnt_roots);
+		if (umount2(proc_dir, MNT_DETACH))
+		{
+			pr_perror("Can't unmount %s", mnt_roots);
+			ret = -1;
+		}
 	}
-	/*
+	else
+	{
+		if (mount("none", mnt_roots, "none", MS_REC | MS_PRIVATE, NULL))
+		{
+			pr_perror("Can't remount root with MS_PRIVATE");
+			ret = 1;
+		}
+		/*
 	 * Don't exit after a first error, because this function
 	 * can be used to rollback in a error case.
 	 * Don't worry about MNT_DETACH, because files are restored after this
 	 * and nobody will not be restored from a wrong mount namespace.
 	 */
-	// if (umount2(mnt_roots, MNT_DETACH)) {
-	// 	pr_perror("Can't unmount %s", mnt_roots);
-	// 	ret = -1;
-	// }
+		if (umount2(mnt_roots, MNT_DETACH))
+		{
+			pr_perror("Can't unmount %s", mnt_roots);
+			ret = -1;
+		}
 
-	// if (rmdir(mnt_roots)) {
-	// 	pr_perror("Can't remove the directory %s", mnt_roots);
-	// 	ret = -1;
-	// }
+		if (rmdir(mnt_roots))
+		{
+			pr_perror("Can't remove the directory %s", mnt_roots);
+			ret = -1;
+		}
+	}
 
 	return ret;
 }
@@ -3323,8 +3350,8 @@ int depopulate_roots_yard(int mntns_fd, bool only_ghosts)
 	if (try_clean_remaps(only_ghosts))
 		ret = -1;
 
-	// if (__depopulate_roots_yard())
-	// 	ret = -1;
+	if (__depopulate_roots_yard())
+		ret = -1;
 
 	if (setns(old_ns, CLONE_NEWNS) < 0) {
 		pr_perror("Fail to switch back!");
@@ -3358,7 +3385,7 @@ int prepare_mnt_ns_for_container(void)
 		return 0;
 
 	pr_info("Restoring mount namespace for container\n");
-	rst = open("/proc/8546/ns/mnt", O_RDONLY);
+	rst = open("/proc/16556/ns/mnt", O_RDONLY);
 	if (rst < 0)
 	{
 		pr_err("can't open ns/mnt of 8546\n");
@@ -3480,13 +3507,10 @@ int prepare_mnt_ns(void)
 		if (nsid->nd != &mnt_ns_desc)
 			continue;
 		/* Create the new mount namespace */
-		pr_info("unshare 3 start\n");
 		if (unshare(CLONE_NEWNS)) {
 			pr_perror("Unable to create a new mntns");
 			goto err;
 		}
-		pr_info("unshare 3 end\n");
-
 		fd = open_proc(PROC_SELF, "ns/mnt");
 		if (fd < 0)
 			goto err;
@@ -3500,20 +3524,11 @@ int prepare_mnt_ns(void)
 			 * namespace, because there are file descriptors
 			 * linked with it (e.g. to bind-mount slave pty-s).
 			 */
-			// pr_info("set ns start\n");
-			// if (setns(rst, CLONE_NEWNS)) {
-			// 	pr_perror("Can't restore mntns back");
-			// 	goto err;
-			// }
-			// pr_info("set ns end\n");
-			unshare(CLONE_NEWNS);
-			pr_info("unshare 4 end\n");
 			if (setns(rst, CLONE_NEWNS))
 			{
 				pr_perror("error\n");
 				goto err;
 			}
-			pr_info("setns 4 end\n");
 			SWAP(rst, fd);
 		}
 
@@ -3543,12 +3558,10 @@ int prepare_mnt_ns(void)
 		close(fd);
 
 		/* And return back to regain the access to the roots yard */
-		pr_info("regain back start\n");
 		if (setns(rst, CLONE_NEWNS)) {
 			pr_perror("Can't restore mntns back");
 			goto err;
 		}
-		pr_info("regain back end\n");
 	}
 	close(rst);
 

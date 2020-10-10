@@ -6,6 +6,8 @@ static struct work_item
 {
     int (*work)(void *);
     void *args;
+    int fd;
+    int nstype;
 };
 
 static struct work_queue
@@ -47,6 +49,7 @@ static int push(struct work_item *item)
     return 0;
 }
 
+
 static void *consume_work(void *t)
 {
     struct work_item *item;
@@ -69,12 +72,14 @@ out:
     pthread_exit(NULL);
 }
 
-int add_work(int (*work)(void *), void *args)
+int add_work(int (*work)(void *), void *args, int fd, int nstype)
 {
     struct work_item *item;
     item = (struct work_item *)malloc(sizeof(struct work_item));
     item->work = work;
     item->args = args;
+    item->fd = fd;
+    item->nstype = nstype;
     return push(item);
 }
 
