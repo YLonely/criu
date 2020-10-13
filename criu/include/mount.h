@@ -90,6 +90,8 @@ struct mount_info {
 
 extern struct mount_info *mntinfo;
 extern struct ns_desc mnt_ns_desc;
+extern int mnt_id;
+extern int mnt_ns_fd;
 #ifdef CONFIG_BINFMT_MISC_VIRTUALIZED
 extern int collect_binfmt_misc(void);
 #else
@@ -110,8 +112,8 @@ extern int mnt_is_dir(struct mount_info *pm);
 extern int open_mountpoint(struct mount_info *pm);
 
 extern struct mount_info *collect_mntinfo(struct ns_id *ns, bool for_dump);
-extern int prepare_mnt_ns(void);
-extern int prepare_mnt_ns_for_container(void);
+extern int prepare_mnt_ns(int fd);
+extern int prepare_mnt_ns_for_container(int);
 
 extern int pivot_root(const char *new_root, const char *put_old);
 

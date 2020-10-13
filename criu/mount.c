@@ -27,6 +27,7 @@
 #include "external.h"
 #include "clone-noasan.h"
 #include "fdstore.h"
+#include "cr-daemon.h"
 
 #include "images/mnt.pb-c.h"
 
@@ -47,6 +48,9 @@
 
 /* A helper mount_info entry for the roots yard */
 static struct mount_info *root_yard_mp = NULL;
+
+int mnt_id = -1;
+int mnt_ns_fd = -1;
 
 int ext_mount_add(char *key, char *val)
 {
@@ -2807,25 +2811,15 @@ static int create_mnt_roots(void)
 
 	if (mnt_roots)
 		return 0;
-	if (CONTAINER_OPTIMIZED)
-	{
+	mnt_roots = xstrdup("/tmp/.criu.mntns.XXXXXX");
+	if (mnt_roots == NULL)
+		goto out;
 
-		mnt_roots = xstrdup("/tmp/.criu.mntns.abcdef");
-		if (mnt_roots == NULL)
-			goto out;
-	}
-	else
+	if (mkdtemp(mnt_roots) == NULL)
 	{
-		mnt_roots = xstrdup("/tmp/.criu.mntns.XXXXXX");
-		if (mnt_roots == NULL)
-			goto out;
-
-		if (mkdtemp(mnt_roots) == NULL)
-		{
-			pr_perror("Unable to create a temporary directory");
-			mnt_roots = NULL;
-			goto out;
-		}
+		pr_perror("Unable to create a temporary directory");
+		mnt_roots = NULL;
+		goto out;
 	}
 
 	chmod(mnt_roots, 0777);
@@ -3074,8 +3068,17 @@ rroot:
 
 int mntns_maybe_create_roots(void)
 {
+	char root_path[MAX_ROOT_LEN];
 	if (!(root_ns_mask & CLONE_NEWNS))
 		return 0;
+
+	if (DAEMON_READY)
+	{
+		if (get_mnt_roots(daemon_fd, &mnt_id, root_path))
+			return -1;
+		mnt_roots = xstrdup(root_path);
+		return 0;
+	}
 
 	return create_mnt_roots();
 }
@@ -3277,10 +3280,10 @@ static int __depopulate_roots_yard(void)
 	if (mnt_roots == NULL)
 		return 0;
 
-	if (CONTAINER_OPTIMIZED)
+	if (mnt_id != -1)
 	{
 		char proc_dir[1024];
-		snprintf(proc_dir, sizeof(proc_dir), "%s/13-0000000000/proc", mnt_roots);
+		snprintf(proc_dir, sizeof(proc_dir), "%s/proc", mnt_roots);
 		if (umount2(proc_dir, MNT_DETACH))
 		{
 			pr_perror("Can't unmount %s", mnt_roots);
@@ -3377,7 +3380,7 @@ void cleanup_mnt_ns(void)
 		pr_perror("Can't remove the directory %s", mnt_roots);
 }
 
-int prepare_mnt_ns_for_container(void)
+int prepare_mnt_ns_for_container(int ns_fd)
 {
 	int ret = -1, rst = -1, fd;
 	struct ns_id *nsid;
@@ -3385,19 +3388,11 @@ int prepare_mnt_ns_for_container(void)
 		return 0;
 
 	pr_info("Restoring mount namespace for container\n");
-	rst = open("/proc/16556/ns/mnt", O_RDONLY);
-	if (rst < 0)
-	{
-		pr_err("can't open ns/mnt of 8546\n");
-		return -1;
-	}
-	pr_info("set ns start\n");
-	if (setns(rst, CLONE_NEWNS))
+	if (setns(ns_fd, CLONE_NEWNS))
 	{
 		pr_err("can't enter namespace");
 		return -1;
 	}
-	pr_info("set ns done\n");
 
 	for (nsid = ns_ids; nsid != NULL; nsid = nsid->next)
 	{
@@ -3406,21 +3401,8 @@ int prepare_mnt_ns_for_container(void)
 		if (nsid->nd != &mnt_ns_desc)
 			continue;
 
-		// print_ns_root(nsid, 0, path, sizeof(path) - 1);
-		// //create path
-		// if (mkdir(path, 0600))
-		// {
-		// 	pr_err("cant create path %s\n", path);
-		// 	return -1;
-		// }
-
-		// if (mount("/root/test/cs-test/container1", path, NULL, MS_BIND | MS_REC, NULL))
-		// {
-		// 	pr_err("can't mount rootfs with errno %d\n", errno);
-		// 	return -1;
-		// }
 		//change root
-		if(chroot("/tmp/.criu.mntns.abcdef/13-0000000000/")){
+		if(chroot(mnt_roots)){
 			pr_err("cant change root\n");
 			return -1;
 		}
@@ -3432,8 +3414,7 @@ int prepare_mnt_ns_for_container(void)
 		}
 
 		/* Pin one with a file descriptor */
-		nsid->mnt.nsfd_id = fdstore_add(rst);
-		close(rst);
+		nsid->mnt.nsfd_id = fdstore_add(ns_fd);
 		if (nsid->mnt.nsfd_id < 0)
 		{
 			pr_err("Can't add ns fd\n");
@@ -3457,7 +3438,7 @@ int prepare_mnt_ns_for_container(void)
 	return 0;	
 }
 
-int prepare_mnt_ns(void)
+int prepare_mnt_ns(int ns_fd)
 {
 	int ret = -1, rst = -1, fd;
 	struct ns_id ns = { .type = NS_CRIU, .ns_pid = PROC_SELF, .nd = &mnt_ns_desc };
@@ -3465,6 +3446,9 @@ int prepare_mnt_ns(void)
 
 	if (!(root_ns_mask & CLONE_NEWNS))
 		return 0;
+
+	if (ns_fd != -1)
+		return prepare_mnt_ns_for_container(ns_fd);
 
 	pr_info("Restoring mount namespace\n");
 

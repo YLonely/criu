@@ -27,6 +27,7 @@
 #include "net.h"
 #include "cgroup.h"
 #include "fdstore.h"
+#include "cr-daemon.h"
 
 #include "protobuf.h"
 #include "util.h"
@@ -1753,10 +1754,10 @@ int prepare_namespace(struct pstree_item *item, unsigned long clone_flags)
 	 */
 
 	id = ns_per_id ? item->ids->uts_ns_id : pid;
-	if ((clone_flags & CLONE_NEWUTS) && prepare_utsns(id))
+	if ((clone_flags & CLONE_NEWUTS) && prepare_utsns(id, mnt_ns_fd))
 		goto out;
 	id = ns_per_id ? item->ids->ipc_ns_id : pid;
-	if ((clone_flags & CLONE_NEWIPC) && prepare_ipc_ns(id))
+	if ((clone_flags & CLONE_NEWIPC) && prepare_ipc_ns(id, mnt_ns_fd))
 		goto out;
 
 	if (prepare_net_namespaces())
@@ -1766,16 +1767,10 @@ int prepare_namespace(struct pstree_item *item, unsigned long clone_flags)
 	 * This one is special -- there can be several mount
 	 * namespaces and prepare_mnt_ns handles them itself.
 	 */
-	if (CONTAINER_OPTIMIZED)
-	{
-		if (prepare_mnt_ns_for_container())
-			goto out;
-	}
-	else
-	{
-		if (prepare_mnt_ns())
-			goto out;
-	}
+
+	if (prepare_mnt_ns(mnt_ns_fd))
+		goto out;
+	close_safe(&mnt_ns_fd);
 	ret = 0;
 out:
 	if (restore_sigmask(&sig_mask) < 0)
@@ -1830,8 +1825,18 @@ int prepare_namespace_before_tasks(void)
 	if (netns_keep_nsfd())
 		goto err_netns;
 
+	if (daemon_fd = connect_daemon())
+		pr_info("can not connect to the daemon\n");
+
 	if (mntns_maybe_create_roots())
 		goto err_mnt;
+
+	if (mnt_id != -1)
+	{
+		if (get_mnt_ns_fd(daemon_fd, mnt_id, &mnt_ns_fd))
+			return -1;
+	}
+	close_safe(&daemon_fd);
 
 	if (read_mnt_ns_img())
 		goto err_img;
