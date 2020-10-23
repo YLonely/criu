@@ -3385,7 +3385,7 @@ int prepare_mnt_ns_for_container(void)
 		return 0;
 
 	pr_info("Restoring mount namespace for container\n");
-	rst = open("/proc/16556/ns/mnt", O_RDONLY);
+	rst = open("/proc/17714/ns/mnt", O_RDONLY);
 	if (rst < 0)
 	{
 		pr_err("can't open ns/mnt of 8546\n");

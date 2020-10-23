@@ -706,9 +706,14 @@ static struct iovs_in_range find_iovs_in_vma_range(VmaEntry *entry, struct iovec
 		}
 	}
 	*start_index = i;
-	if (last_iov_len == 0)
-		last_iov_len = iovs[start + l - 1].iov_len;
-	struct iovs_in_range ret = {
+    if (last_iov_len == 0) {
+        int index = (int)start + l - 1;
+        if (index < 0)
+            last_iov_len = 0;
+        else
+            last_iov_len = iovs[index].iov_len;
+    }
+    struct iovs_in_range ret = {
 		.start_iov = &(iovs[start]),
 		.offset = &(offset[start]),
 		.len = l,

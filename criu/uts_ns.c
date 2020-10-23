@@ -67,7 +67,7 @@ int prepare_utsns(int pid)
 	// 	close_image(img);
 	// 	return ret;
 	pr_info("start uts restore\n");
-	int fd = open("/proc/16556/ns/uts", O_RDONLY);
+	int fd = open("/proc/17714/ns/uts", O_RDONLY);
 	setns(fd, CLONE_NEWUTS);
 	close(fd);
 	pr_info("end uts restore\n");
