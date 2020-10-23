@@ -1488,8 +1488,6 @@ static inline int fork_with_pid(struct pstree_item *item)
 			}
 		}
 	}
-	if (likely(item != root_item))
-		clone_flags &= ~CLONE_NEWNET;
 
 	if (kdat.has_clone3_set_tid) {
 		ret = clone3_with_pid_noasan(restore_task_with_children,
@@ -1825,19 +1823,19 @@ static int restore_task_with_children(void *_arg)
 		 * The root task has to be in its namespaces before executing
 		 * ACT_SETUP_NS scripts, so the root netns has to be created here
 		 */
-		// if (root_ns_mask & CLONE_NEWNET) {
-		// 	struct ns_id *ns = net_get_root_ns();
-		// 	if (ns->ext_key){
-		// 		ret = net_set_ext(ns);
-		// 	}
-		// 	else{
-		// 		ret = unshare(CLONE_NEWNET);
-		// 	}
-		// 	if (ret) {
-		// 		pr_perror("Can't unshare net-namespace");
-		// 		goto err;
-		// 	}
-		// }
+		if (root_ns_mask & CLONE_NEWNET) {
+			struct ns_id *ns = net_get_root_ns();
+			if (ns->ext_key){
+				ret = net_set_ext(ns);
+			}
+			else{
+				ret = unshare(CLONE_NEWNET);
+			}
+			if (ret) {
+				pr_perror("Can't unshare net-namespace");
+				goto err;
+			}
+		}
 
 		if (root_ns_mask & CLONE_NEWTIME) {
 			if (prepare_timens(current->ids->time_ns_id))
