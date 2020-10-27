@@ -327,17 +327,20 @@ int pagemap_render_iovec(struct list_head *from, struct task_restore_args *ta)
 
 		ta->vma_ios_n++;
 	}
-	ta->offsets = (struct iovs_offset *)rst_mem_align_cpos(RM_PRIVATE);
-	offsets = rst_mem_alloc(OFFSET_SIZE(rio->nr_iovs), RM_PRIVATE);
-	offsets->len = rio->nr_iovs;
-	uint64_t off = rio->off;
-	for (int i = 0; i < rio->nr_iovs; i++)
-	{
-		offsets->offset[i] = off;
-		off += rio->iovs[i].iov_len;
-	}
+    ta->offsets = (struct iovs_offset *)rst_mem_align_cpos(RM_PRIVATE);
+    rio = (struct restore_vma_io *)rst_mem_remap_ptr((unsigned long)(ta->vma_ios), RM_PRIVATE);
+    for (int i = 0; i < ta->vma_ios_n; i++) {
+        offsets = rst_mem_alloc(OFFSET_SIZE(rio->nr_iovs), RM_PRIVATE);
+        offsets->len = rio->nr_iovs;
+        uint64_t off = rio->off;
+        for (int i = 0; i < rio->nr_iovs; i++) {
+            offsets->offset[i] = off;
+            off += rio->iovs[i].iov_len;
+        }
+        rio = ((void *)rio) + RIO_SIZE(rio->nr_iovs);
+    }
 
-	return 0;
+    return 0;
 }
 
 int pagemap_enqueue_iovec(struct page_read *pr, void *buf,
