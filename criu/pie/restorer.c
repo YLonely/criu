@@ -1588,8 +1588,12 @@ long __export_restore_task(struct task_restore_args *args)
                 ssize_t local_r;
                 if (!vma_entry_is(vma, VMA_AREA_REGULAR) ||
                     (vma->flags & MAP_GROWSDOWN)) {
-                    local_r = sys_pread(args->vma_ios_fd, p, io_size,
-                                        offsets_arr->offset[j]);
+                    struct iovec iov_temp = {
+                        .iov_base = p,
+                        .iov_len = io_size,
+                    };
+                    local_r = sys_preadv(args->vma_ios_fd, &iov_temp, 1,
+                                         offsets_arr->offset[j]);
                 } else {
                     sys_munmap(p, io_size);
                     uint64_t ret = sys_mmap(
