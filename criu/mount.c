@@ -3320,50 +3320,50 @@ int depopulate_roots_yard(int mntns_fd, bool only_ghosts)
 {
 	int ret = 0, old_cwd = -1, old_ns = -1;
 
-	if (mntns_fd < 0) {
-		ret |= try_clean_remaps(only_ghosts);
-		cleanup_mnt_ns();
-		return ret;
-	}
+	// if (mntns_fd < 0) {
+	// 	ret |= try_clean_remaps(only_ghosts);
+	// 	cleanup_mnt_ns();
+	// 	return ret;
+	// }
 
-	pr_info("Switching to new ns to clean ghosts\n");
+	// pr_info("Switching to new ns to clean ghosts\n");
 
-	old_cwd = open(".", O_PATH);
-	if (old_cwd < 0) {
-		pr_perror("Unable to open cwd");
-		return -1;
-	}
+	// old_cwd = open(".", O_PATH);
+	// if (old_cwd < 0) {
+	// 	pr_perror("Unable to open cwd");
+	// 	return -1;
+	// }
 
-	old_ns = open_proc(PROC_SELF, "ns/mnt");
-	if (old_ns < 0) {
-		pr_perror("`- Can't keep old ns");
-		close(old_cwd);
-		return -1;
-	}
-	if (setns(mntns_fd, CLONE_NEWNS) < 0) {
-		pr_perror("`- Can't switch");
-		close(old_ns);
-		close(old_cwd);
-		return -1;
-	}
+	// old_ns = open_proc(PROC_SELF, "ns/mnt");
+	// if (old_ns < 0) {
+	// 	pr_perror("`- Can't keep old ns");
+	// 	close(old_cwd);
+	// 	return -1;
+	// }
+	// if (setns(mntns_fd, CLONE_NEWNS) < 0) {
+	// 	pr_perror("`- Can't switch");
+	// 	close(old_ns);
+	// 	close(old_cwd);
+	// 	return -1;
+	// }
 
-	if (try_clean_remaps(only_ghosts))
-		ret = -1;
+	// if (try_clean_remaps(only_ghosts))
+	// 	ret = -1;
 
-	if (__depopulate_roots_yard())
-		ret = -1;
+	// if (__depopulate_roots_yard())
+	// 	ret = -1;
 
-	if (setns(old_ns, CLONE_NEWNS) < 0) {
-		pr_perror("Fail to switch back!");
-		ret = -1;
-	}
-	close(old_ns);
+	// if (setns(old_ns, CLONE_NEWNS) < 0) {
+	// 	pr_perror("Fail to switch back!");
+	// 	ret = -1;
+	// }
+	// close(old_ns);
 
-	if (fchdir(old_cwd)) {
-		pr_perror("Unable to restore cwd");
-		ret = -1;
-	}
-	close(old_cwd);
+	// if (fchdir(old_cwd)) {
+	// 	pr_perror("Unable to restore cwd");
+	// 	ret = -1;
+	// }
+	// close(old_cwd);
 
 	return ret;
 }
@@ -3385,14 +3385,14 @@ int prepare_mnt_ns_for_container(void)
 		return 0;
 
 	pr_info("Restoring mount namespace for container\n");
-	rst = open("/proc/17714/ns/mnt", O_RDONLY);
+	rst = open("/proc/self/ns/mnt", O_RDONLY);
 	if (rst < 0)
 	{
 		pr_err("can't open ns/mnt of 8546\n");
 		return -1;
 	}
 	pr_info("set ns start\n");
-	if (setns(rst, CLONE_NEWNS))
+	if (false)
 	{
 		pr_err("can't enter namespace");
 		return -1;

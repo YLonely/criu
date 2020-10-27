@@ -940,9 +940,6 @@ int prepare_ipc_ns(int pid)
 	// if (ret < 0)
 	// 	return ret;
 	pr_info("start ipc restore\n");
-	int fd = open("/proc/17714/ns/ipc", O_RDONLY);
-	setns(fd, CLONE_NEWIPC);
-	close(fd);
 	pr_info("end ipc restore\n");
 	return 0;
 }
