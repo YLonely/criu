@@ -157,7 +157,6 @@ void write_stats(int what)
 	char *name;
 	struct cr_img *img;
 
-	pr_info("Writing stats\n");
 	if (what == DUMP_STATS) {
 		stats.dump = &ds_entry;
 
