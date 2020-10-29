@@ -922,26 +922,23 @@ static int prepare_ipc_var(int pid)
 	return 0;
 }
 
-int prepare_ipc_ns(int pid)
-{
-	// int ret;
+int prepare_ipc_ns(int pid) {
+    int ret;
 
-	// pr_info("Restoring IPC namespace\n");
-	// ret = prepare_ipc_var(pid);
-	// if (ret < 0)
-	// 	return ret;
-	// ret = prepare_ipc_shm(pid);
-	// if (ret < 0)
-	// 	return ret;
-	// ret = prepare_ipc_msg(pid);
-	// if (ret < 0)
-	// 	return ret;
-	// ret = prepare_ipc_sem(pid);
-	// if (ret < 0)
-	// 	return ret;
-	pr_info("start ipc restore\n");
-	pr_info("end ipc restore\n");
-	return 0;
+    pr_info("Restoring IPC namespace\n");
+    ret = prepare_ipc_var(pid);
+    if (ret < 0)
+        return ret;
+    ret = prepare_ipc_shm(pid);
+    if (ret < 0)
+        return ret;
+    ret = prepare_ipc_msg(pid);
+    if (ret < 0)
+        return ret;
+    ret = prepare_ipc_sem(pid);
+    if (ret < 0)
+        return ret;
+    return 0;
 }
 
 struct ns_desc ipc_ns_desc = NS_DESC_ENTRY(CLONE_NEWIPC, "ipc");
