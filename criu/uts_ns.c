@@ -39,43 +39,40 @@ err:
 	return ret < 0 ? -1 : 0;
 }
 
-int prepare_utsns(int pid, int fd)
-{
-	pr_info("Restoring UTS namespace\n");
-	if (fd != -1)
-	{
-		setns(fd, CLONE_NEWUTS);
-		return 0;
-	}
-	int ret;
-	struct cr_img *img;
-	UtsnsEntry *ue;
-	struct sysctl_req req[] = {
-		{"kernel/hostname"},
-		{"kernel/domainname"},
-	};
+int prepare_utsns(int pid, int *ns_fd) {
 
-	img = open_image(CR_FD_UTSNS, O_RSTR, pid);
-	if (!img)
-		return -1;
+    int ret;
+    pr_info("Restoring UTS namespace\n");
+    if (*ns_fd != NULL) {
+        ret = setns(*ns_fd, CLONE_NEWUTS);
+        return ret;
+    }
 
-	ret = pb_read_one(img, &ue, PB_UTSNS);
-	if (ret < 0)
-		goto out;
+    struct cr_img *img;
+    UtsnsEntry *ue;
+    struct sysctl_req req[] = {
+        {"kernel/hostname"},
+        {"kernel/domainname"},
+    };
 
-	req[0].arg = ue->nodename;
-	req[0].type = CTL_STR(strlen(ue->nodename));
-	req[1].arg = ue->domainname;
-	req[1].type = CTL_STR(strlen(ue->domainname));
+    img = open_image(CR_FD_UTSNS, O_RSTR, pid);
+    if (!img)
+        return -1;
 
-	// 	ret = sysctl_op(req, ARRAY_SIZE(req), CTL_WRITE, CLONE_NEWUTS);
-	// 	utsns_entry__free_unpacked(ue, NULL);
-	// out:
-	// 	close_image(img);
-	// 	return ret;
-	pr_info("start uts restore\n");
-	pr_info("end uts restore\n");
-	return 0;
+    ret = pb_read_one(img, &ue, PB_UTSNS);
+    if (ret < 0)
+        goto out;
+
+    req[0].arg = ue->nodename;
+    req[0].type = CTL_STR(strlen(ue->nodename));
+    req[1].arg = ue->domainname;
+    req[1].type = CTL_STR(strlen(ue->domainname));
+
+    ret = sysctl_op(req, ARRAY_SIZE(req), CTL_WRITE, CLONE_NEWUTS);
+    utsns_entry__free_unpacked(ue, NULL);
+out:
+    close_image(img);
+    return ret;
 }
 
 struct ns_desc uts_ns_desc = NS_DESC_ENTRY(CLONE_NEWUTS, "uts");

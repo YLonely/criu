@@ -227,4 +227,8 @@ extern int add_ns_shared_cb(int (*actor)(void *data), void *data);
 extern struct ns_id *get_socket_ns(int lfd);
 extern struct ns_id *lookup_ns_by_kid(unsigned int kid, struct ns_desc *nd);
 
+#define INHERIT_IPC_NS_FD_KEY "inherit_ipc_ns_fd"
+#define INHERIT_UTS_NS_FD_KEY "inherit_uts_ns_fd"
+#define INHERIT_MNT_NS_FD_KEY "inherit_mnt_ns_fd"
+
 #endif /* __CR_NS_H__ */
