@@ -48,6 +48,8 @@
 /* A helper mount_info entry for the roots yard */
 static struct mount_info *root_yard_mp = NULL;
 
+static bool inherited_mount_root = false;
+
 
 int ext_mount_add(char *key, char *val)
 {
@@ -2691,11 +2693,7 @@ static int fixup_remap_mounts(void)
 
 static int cr_pivot_root(char *root)
 {
-	char tmp_dir_tmpl[] = "crtools-put-root.XXXXXX";
-	bool tmp_dir = false;
-	char *put_root = "tmp";
 	int exit_code = -1;
-	struct stat st;
 
 	pr_info("Move the root to %s\n", root ? : ".");
 
@@ -2706,54 +2704,19 @@ static int cr_pivot_root(char *root)
 		}
 	}
 
-	if (stat(put_root, &st) || !S_ISDIR(st.st_mode)) {
-		put_root = mkdtemp(tmp_dir_tmpl);
-		if (put_root == NULL) {
-			pr_perror("Can't create a temporary directory");
-			return -1;
-		}
-		tmp_dir = true;
-	}
-
-	if (mount(put_root, put_root, NULL, MS_BIND, NULL)) {
-		pr_perror("Unable to mount tmpfs in %s", put_root);
-		goto err_root;
-	}
-
-	if (mount(NULL, put_root, NULL, MS_PRIVATE, NULL)) {
-		pr_perror("Can't remount %s with MS_PRIVATE", put_root);
-		goto err_tmpfs;
-	}
-
-	if (pivot_root(".", put_root)) {
-		pr_perror("pivot_root(., %s) failed", put_root);
-		goto err_tmpfs;
-	}
-
-	if (mount("none", put_root, "none", MS_REC|MS_SLAVE, NULL)) {
-		pr_perror("Can't remount root with MS_PRIVATE");
+	if (pivot_root(".", ".")) {
+		pr_perror("pivot_root failed");
 		return -1;
 	}
 
 	exit_code = 0;
 
-	// if (umount2(put_root, MNT_DETACH)) {
-	// 	pr_perror("Can't umount %s", put_root);
-	// 	return -1;
-	// }
+    if (umount2(".", MNT_DETACH)) {
+        pr_perror("Can't umount old root");
+        return -1;
+    }
 
-err_tmpfs:
-	// if (umount2(put_root, MNT_DETACH)) {
-	// 	pr_perror("Can't umount %s", put_root);
-	// 	return -1;
-	// }
-
-err_root:
-	// if (tmp_dir && rmdir(put_root)) {
-	// 	pr_perror("Can't remove the directory %s", put_root);
-	// 	return -1;
-	// }
-	return exit_code;
+    return exit_code;
 }
 
 struct mount_info *mnt_entry_alloc()
@@ -3266,89 +3229,84 @@ static int __depopulate_roots_yard(void)
 {
 	int ret = 0;
 
-	if (mnt_roots == NULL)
-		return 0;
+    if (mnt_roots == NULL)
+        return 0;
 
-	if (mnt_ns_id != -1)
-	{
-	}
-	else
-	{
-		if (mount("none", mnt_roots, "none", MS_REC | MS_PRIVATE, NULL))
-		{
-			pr_perror("Can't remount root with MS_PRIVATE");
-			ret = 1;
-		}
-		/*
-	 * Don't exit after a first error, because this function
-	 * can be used to rollback in a error case.
-	 * Don't worry about MNT_DETACH, because files are restored after this
-	 * and nobody will not be restored from a wrong mount namespace.
-	 */
-		if (umount2(mnt_roots, MNT_DETACH))
-		{
-			pr_perror("Can't unmount %s", mnt_roots);
-			ret = -1;
-		}
+    if (mount("none", mnt_roots, "none", MS_REC | MS_PRIVATE, NULL)) {
+        pr_perror("Can't remount root with MS_PRIVATE");
+        ret = 1;
+    }
+    /*
+     * Don't exit after a first error, because this function
+     * can be used to rollback in a error case.
+     * Don't worry about MNT_DETACH, because files are restored after this
+     * and nobody will not be restored from a wrong mount namespace.
+     */
+    if (umount2(mnt_roots, MNT_DETACH)) {
+        pr_perror("Can't unmount %s", mnt_roots);
+        ret = -1;
+    }
 
-		if (rmdir(mnt_roots))
-		{
-			pr_perror("Can't remove the directory %s", mnt_roots);
-			ret = -1;
-		}
-	}
+    if (rmdir(mnt_roots)) {
+        pr_perror("Can't remove the directory %s", mnt_roots);
+        ret = -1;
+    }
 
-	return ret;
+    return ret;
 }
 
 int depopulate_roots_yard(int mntns_fd, bool only_ghosts)
 {
 	int ret = 0, old_cwd = -1, old_ns = -1;
 
-	// if (mntns_fd < 0) {
-	// 	ret |= try_clean_remaps(only_ghosts);
-	// 	cleanup_mnt_ns();
-	// 	return ret;
-	// }
+    if (inherited_mount_root) {
+        return ret;
+    }
 
-	// pr_info("Switching to new ns to clean ghosts\n");
+    if (mntns_fd < 0) {
+		ret |= try_clean_remaps(only_ghosts);
+		cleanup_mnt_ns();
+		return ret;
+	}
 
-	// old_cwd = open(".", O_PATH);
-	// if (old_cwd < 0) {
-	// 	pr_perror("Unable to open cwd");
-	// 	return -1;
-	// }
+	pr_info("Switching to new ns to clean ghosts\n");
 
-	// old_ns = open_proc(PROC_SELF, "ns/mnt");
-	// if (old_ns < 0) {
-	// 	pr_perror("`- Can't keep old ns");
-	// 	close(old_cwd);
-	// 	return -1;
-	// }
-	// if (setns(mntns_fd, CLONE_NEWNS) < 0) {
-	// 	pr_perror("`- Can't switch");
-	// 	close(old_ns);
-	// 	close(old_cwd);
-	// 	return -1;
-	// }
+	old_cwd = open(".", O_PATH);
+	if (old_cwd < 0) {
+		pr_perror("Unable to open cwd");
+		return -1;
+	}
 
-	// if (try_clean_remaps(only_ghosts))
-	// 	ret = -1;
+	old_ns = open_proc(PROC_SELF, "ns/mnt");
+	if (old_ns < 0) {
+		pr_perror("`- Can't keep old ns");
+		close(old_cwd);
+		return -1;
+	}
+	if (setns(mntns_fd, CLONE_NEWNS) < 0) {
+		pr_perror("`- Can't switch");
+		close(old_ns);
+		close(old_cwd);
+		return -1;
+	}
 
-	// if (__depopulate_roots_yard())
-	// 	ret = -1;
+	if (try_clean_remaps(only_ghosts))
+		ret = -1;
 
-	// if (setns(old_ns, CLONE_NEWNS) < 0) {
-	// 	pr_perror("Fail to switch back!");
-	// 	ret = -1;
-	// }
-	// close(old_ns);
+	if (__depopulate_roots_yard())
+		ret = -1;
 
-	// if (fchdir(old_cwd)) {
-	// 	pr_perror("Unable to restore cwd");
-	// 	ret = -1;
-	// }
-	// close(old_cwd);
+	if (setns(old_ns, CLONE_NEWNS) < 0) {
+		pr_perror("Fail to switch back!");
+		ret = -1;
+	}
+	close(old_ns);
+
+	if (fchdir(old_cwd)) {
+		pr_perror("Unable to restore cwd");
+		ret = -1;
+	}
+	close(old_cwd);
 
 	return ret;
 }
@@ -3362,17 +3320,19 @@ void cleanup_mnt_ns(void)
 		pr_perror("Can't remove the directory %s", mnt_roots);
 }
 
-int prepare_mnt_ns_for_container(int ns_fd)
+int prepare_mnt_ns_for_container(int *ns_fd)
 {
 	int ret = -1, rst = -1, fd;
-	struct ns_id *nsid;
-	if (!(root_ns_mask & CLONE_NEWNS))
-		return 0;
+    struct ns_id *nsid;
+    if (ns_fd == NULL)
+        return ret;
+    if (!(root_ns_mask & CLONE_NEWNS))
+        return 0;
 
-	pr_info("Restoring mount namespace for container\n");
+    pr_info("Restoring mount namespace for container\n");
 	if (setns(ns_fd, CLONE_NEWNS))
 	{
-		pr_err("can't enter namespace");
+		pr_err("Can't enter namespace");
 		return -1;
 	}
 
@@ -3384,7 +3344,7 @@ int prepare_mnt_ns_for_container(int ns_fd)
 			continue;
 
 		//change root
-		if(chroot(mnt_roots)){
+		if(cr_pivot_root(opts.root)){
 			pr_err("cant change root\n");
 			return -1;
 		}
@@ -3420,7 +3380,7 @@ int prepare_mnt_ns_for_container(int ns_fd)
 	return 0;	
 }
 
-int prepare_mnt_ns(int ns_fd)
+int prepare_mnt_ns(int *ns_fd)
 {
 	int ret = -1, rst = -1, fd;
 	struct ns_id ns = { .type = NS_CRIU, .ns_pid = PROC_SELF, .nd = &mnt_ns_desc };
@@ -3429,8 +3389,10 @@ int prepare_mnt_ns(int ns_fd)
 	if (!(root_ns_mask & CLONE_NEWNS))
 		return 0;
 
-	if (ns_fd != -1)
+	if (ns_fd != NULL){
+		inherited_mount_root = true;
 		return prepare_mnt_ns_for_container(ns_fd);
+	}
 
 	pr_info("Restoring mount namespace\n");
 
