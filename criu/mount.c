@@ -3320,11 +3320,11 @@ void cleanup_mnt_ns(void)
 		pr_perror("Can't remove the directory %s", mnt_roots);
 }
 
-int prepare_mnt_ns_for_container(int *ns_fd)
+int prepare_mnt_ns_for_container(int ns_fd)
 {
 	int ret = -1, rst = -1, fd;
     struct ns_id *nsid;
-    if (ns_fd == NULL)
+    if (ns_fd == -1)
         return ret;
     if (!(root_ns_mask & CLONE_NEWNS))
         return 0;
@@ -3380,7 +3380,7 @@ int prepare_mnt_ns_for_container(int *ns_fd)
 	return 0;	
 }
 
-int prepare_mnt_ns(int *ns_fd)
+int prepare_mnt_ns(int ns_fd)
 {
 	int ret = -1, rst = -1, fd;
 	struct ns_id ns = { .type = NS_CRIU, .ns_pid = PROC_SELF, .nd = &mnt_ns_desc };
@@ -3389,7 +3389,7 @@ int prepare_mnt_ns(int *ns_fd)
 	if (!(root_ns_mask & CLONE_NEWNS))
 		return 0;
 
-	if (ns_fd != NULL){
+	if (ns_fd != -1){
 		inherited_mount_root = true;
 		return prepare_mnt_ns_for_container(ns_fd);
 	}

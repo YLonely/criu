@@ -110,8 +110,8 @@ extern int mnt_is_dir(struct mount_info *pm);
 extern int open_mountpoint(struct mount_info *pm);
 
 extern struct mount_info *collect_mntinfo(struct ns_id *ns, bool for_dump);
-extern int prepare_mnt_ns(int*);
-extern int prepare_mnt_ns_for_container(int*);
+extern int prepare_mnt_ns(int);
+extern int prepare_mnt_ns_for_container(int);
 
 extern int pivot_root(const char *new_root, const char *put_old);
 

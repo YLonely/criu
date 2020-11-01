@@ -39,12 +39,12 @@ err:
 	return ret < 0 ? -1 : 0;
 }
 
-int prepare_utsns(int pid, int *ns_fd) {
+int prepare_utsns(int pid, int ns_fd) {
 
     int ret;
     pr_info("Restoring UTS namespace\n");
-    if (*ns_fd != NULL) {
-        ret = setns(*ns_fd, CLONE_NEWUTS);
+    if (ns_fd != -1) {
+        ret = setns(ns_fd, CLONE_NEWUTS);
         return ret;
     }
 

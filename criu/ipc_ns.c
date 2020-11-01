@@ -922,12 +922,12 @@ static int prepare_ipc_var(int pid)
 	return 0;
 }
 
-int prepare_ipc_ns(int pid, int *ns_fd) {
+int prepare_ipc_ns(int pid, int ns_fd) {
     int ret;
 
     pr_info("Restoring IPC namespace\n");
-    if (ns_fd != NULL) {
-        ret = setns(*ns_fd, CLONE_NEWIPC);
+    if (ns_fd != -1) {
+        ret = setns(ns_fd, CLONE_NEWIPC);
         return ret;
     }
     ret = prepare_ipc_var(pid);

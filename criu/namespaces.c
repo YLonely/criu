@@ -27,8 +27,6 @@
 #include "net.h"
 #include "cgroup.h"
 #include "fdstore.h"
-#include "cr-daemon.h"
-
 #include "protobuf.h"
 #include "util.h"
 #include "images/ns.pb-c.h"
@@ -1755,10 +1753,10 @@ int prepare_namespace(struct pstree_item *item, unsigned long clone_flags)
 	
 
 	id = ns_per_id ? item->ids->uts_ns_id : pid;
-	if ((clone_flags & CLONE_NEWUTS) && prepare_utsns(id, uts_ns_fd))
+	if ((clone_flags & CLONE_NEWUTS) && prepare_utsns(id, inherit_fd_lookup_id(INHERIT_UTS_NS_FD_KEY)))
 		goto out;
 	id = ns_per_id ? item->ids->ipc_ns_id : pid;
-	if ((clone_flags & CLONE_NEWIPC) && prepare_ipc_ns(id, ipc_ns_fd))
+	if ((clone_flags & CLONE_NEWIPC) && prepare_ipc_ns(id, inherit_fd_lookup_id(INHERIT_IPC_NS_FD_KEY)))
 		goto out;
 
 	if (prepare_net_namespaces())
@@ -1769,9 +1767,8 @@ int prepare_namespace(struct pstree_item *item, unsigned long clone_flags)
 	 * namespaces and prepare_mnt_ns handles them itself.
 	 */
 
-	if (prepare_mnt_ns(new_mnt_ns_fd))
+	if (prepare_mnt_ns(inherit_fd_lookup_id(INHERIT_MNT_NS_FD_KEY)))
 		goto out;
-	close_safe(&mnt_ns_fd);
 	ret = 0;
 out:
 	if (restore_sigmask(&sig_mask) < 0)
