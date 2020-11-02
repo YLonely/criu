@@ -1753,10 +1753,10 @@ int prepare_namespace(struct pstree_item *item, unsigned long clone_flags)
 	
 
 	id = ns_per_id ? item->ids->uts_ns_id : pid;
-	if ((clone_flags & CLONE_NEWUTS) && prepare_utsns(id, inherit_fd_lookup_id(INHERIT_UTS_NS_FD_KEY)))
+	if ((clone_flags & CLONE_NEWUTS) && prepare_utsns(id, inherit_fd_lookup_id(EXTERNAL_UTS_NS_FD_KEY)))
 		goto out;
 	id = ns_per_id ? item->ids->ipc_ns_id : pid;
-	if ((clone_flags & CLONE_NEWIPC) && prepare_ipc_ns(id, inherit_fd_lookup_id(INHERIT_IPC_NS_FD_KEY)))
+	if ((clone_flags & CLONE_NEWIPC) && prepare_ipc_ns(id, inherit_fd_lookup_id(EXTERNAL_IPC_NS_FD_KEY)))
 		goto out;
 
 	if (prepare_net_namespaces())
@@ -1767,7 +1767,7 @@ int prepare_namespace(struct pstree_item *item, unsigned long clone_flags)
 	 * namespaces and prepare_mnt_ns handles them itself.
 	 */
 
-	if (prepare_mnt_ns(inherit_fd_lookup_id(INHERIT_MNT_NS_FD_KEY)))
+	if (prepare_mnt_ns(inherit_fd_lookup_id(EXTERNAL_MNT_NS_FD_KEY)))
 		goto out;
 	ret = 0;
 out:
