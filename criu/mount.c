@@ -2693,7 +2693,11 @@ static int fixup_remap_mounts(void)
 
 static int cr_pivot_root(char *root)
 {
+	char tmp_dir_tmpl[] = "crtools-put-root.XXXXXX";
+	bool tmp_dir = false;
+	char *put_root = "tmp";
 	int exit_code = -1;
+	struct stat st;
 
 	pr_info("Move the root to %s\n", root ? : ".");
 
@@ -2704,19 +2708,55 @@ static int cr_pivot_root(char *root)
 		}
 	}
 
-	if (pivot_root(".", ".")) {
-		pr_perror("pivot_root failed");
+	if (stat(put_root, &st) || !S_ISDIR(st.st_mode)) {
+		put_root = mkdtemp(tmp_dir_tmpl);
+		if (put_root == NULL) {
+			pr_perror("Can't create a temporary directory");
+			return -1;
+		}
+		tmp_dir = true;
+	}
+
+	if (mount(put_root, put_root, NULL, MS_BIND, NULL)) {
+		pr_perror("Unable to mount tmpfs in %s", put_root);
+		goto err_root;
+	}
+
+	if (mount(NULL, put_root, NULL, MS_PRIVATE, NULL)) {
+		pr_perror("Can't remount %s with MS_PRIVATE", put_root);
+		goto err_tmpfs;
+	}
+
+	if (pivot_root(".", put_root)) {
+		pr_perror("pivot_root(., %s) failed", put_root);
+		goto err_tmpfs;
+	}
+
+	if (mount("none", put_root, "none", MS_REC|MS_SLAVE, NULL)) {
+		pr_perror("Can't remount root with MS_PRIVATE");
 		return -1;
 	}
 
 	exit_code = 0;
 
-    if (umount2(".", MNT_DETACH)) {
-        pr_perror("Can't umount old root");
-        return -1;
-    }
+	if (umount2(put_root, MNT_DETACH)) {
+		pr_perror("Can't umount %s", put_root);
+		return -1;
+	}
 
-    return exit_code;
+err_tmpfs:
+	if (umount2(put_root, MNT_DETACH)) {
+		pr_perror("Can't umount %s", put_root);
+		return -1;
+	}
+
+err_root:
+	if (tmp_dir && rmdir(put_root)) {
+		pr_perror("Can't remove the directory %s", put_root);
+		return -1;
+	}
+
+	return exit_code;
 }
 
 struct mount_info *mnt_entry_alloc()

@@ -42,7 +42,7 @@ err:
 int prepare_utsns(int pid, int ns_fd) {
 
     int ret;
-    pr_info("Restoring UTS namespace\n");
+    pr_info("Restoring UTS namespace with fd %d\n", ns_fd);
     if (ns_fd != -1) {
         ret = setns(ns_fd, CLONE_NEWUTS);
         return ret;

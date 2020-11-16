@@ -925,7 +925,7 @@ static int prepare_ipc_var(int pid)
 int prepare_ipc_ns(int pid, int ns_fd) {
     int ret;
 
-    pr_info("Restoring IPC namespace\n");
+    pr_info("Restoring IPC namespace with fd %d\n", ns_fd);
     if (ns_fd != -1) {
         ret = setns(ns_fd, CLONE_NEWIPC);
         return ret;
