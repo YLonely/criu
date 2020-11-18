@@ -3391,8 +3391,8 @@ int prepare_mnt_ns_for_container(int ns_fd)
 		//mount proc
 		if (mount("proc", "/proc", "proc", 0, NULL))
 		{
-			pr_err("cant mount proc");
-			return -1;
+            pr_err("mount proc with error %d\n", errno);
+            return -1;
 		}
 
 		/* Pin one with a file descriptor */
