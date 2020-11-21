@@ -48,8 +48,6 @@
 /* A helper mount_info entry for the roots yard */
 static struct mount_info *root_yard_mp = NULL;
 
-static bool inherited_mount_root = false;
-
 
 int ext_mount_add(char *key, char *val)
 {
@@ -3299,11 +3297,10 @@ int depopulate_roots_yard(int mntns_fd, bool only_ghosts)
 {
 	int ret = 0, old_cwd = -1, old_ns = -1;
 
-    if (inherited_mount_root) {
-        return ret;
-    }
+	if (inherit_fd_lookup_id(EXTERNAL_MNT_NS_FD_KEY) != -1)
+		return 0;
 
-    if (mntns_fd < 0) {
+	if (mntns_fd < 0) {
 		ret |= try_clean_remaps(only_ghosts);
 		cleanup_mnt_ns();
 		return ret;
@@ -3430,7 +3427,6 @@ int prepare_mnt_ns(int ns_fd)
 		return 0;
 
 	if (ns_fd != -1){
-		inherited_mount_root = true;
 		return prepare_mnt_ns_for_container(ns_fd);
 	}
 
