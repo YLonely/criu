@@ -2689,6 +2689,21 @@ static int fixup_remap_mounts(void)
 	return 0;
 }
 
+static int cr_change_root(char *root){
+    if (!root)
+        return -1;
+    pr_info("Move the root to %s\n", root);
+    if (chdir(root)) {
+        pr_perror("chdir(%s) failed", root);
+        return -1;
+    }
+    if (chroot(root)) {
+        pr_perror("chroot(%s) failed", root);
+        return -1;
+    }
+    return 0;
+}
+
 static int cr_pivot_root(char *root)
 {
 	char tmp_dir_tmpl[] = "crtools-put-root.XXXXXX";
@@ -3381,7 +3396,7 @@ int prepare_mnt_ns_for_container(int ns_fd)
 			continue;
 
 		//change root
-		if(cr_pivot_root(opts.root)){
+		if(cr_change_root(opts.root)){
 			pr_err("cant change root\n");
 			return -1;
 		}
