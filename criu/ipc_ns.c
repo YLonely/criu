@@ -922,11 +922,47 @@ static int prepare_ipc_var(int pid)
 	return 0;
 }
 
+int prepare_ipc_shm_info(int pid) {
+    int ret;
+    struct cr_img *img;
+
+    pr_info("Restoring information of IPC shared memory\n");
+    img = open_image(CR_FD_IPCNS_SHM, O_RSTR, pid);
+    if (!img)
+        return -1;
+
+    while (1) {
+        IpcShmEntry *shm;
+
+        ret = pb_read_one_eof(img, &shm, PB_IPC_SHM);
+        if (ret < 0) {
+            pr_err("Failed to read IPC shared memory segment\n");
+            ret = -EIO;
+            goto err;
+        }
+        if (ret == 0)
+            break;
+
+        if (collect_sysv_shmem(shm->desc->id, shm->size)){
+			ret = -1;
+			goto err;
+		}
+    }
+
+    close_image(img);
+    return 0;
+err:
+    close_image(img);
+    return ret;
+}
+
 int prepare_ipc_ns(int pid, int ns_fd) {
     int ret;
 
     pr_info("Restoring IPC namespace with fd %d\n", ns_fd);
     if (ns_fd != -1) {
+        if (prepare_ipc_shm_info(pid))
+            return -1;
         ret = setns(ns_fd, CLONE_NEWIPC);
         return ret;
     }
