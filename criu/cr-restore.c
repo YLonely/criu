@@ -1825,10 +1825,12 @@ static int restore_task_with_children(void *_arg)
 		 */
 		if (root_ns_mask & CLONE_NEWNET) {
 			struct ns_id *ns = net_get_root_ns();
+			if (inherit_fd_lookup_id(EXTERNAL_NET_NS_FD_KEY) > 0){
+				ns->ext_key = EXTERNAL_NET_NS_FD_KEY;
+			}
 			if (ns->ext_key){
 				ret = net_set_ext(ns);
-			}
-			else{
+			}else{
 				ret = unshare(CLONE_NEWNET);
 			}
 			if (ret) {

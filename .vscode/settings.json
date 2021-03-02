@@ -1,0 +1,12 @@
+{
+    "files.associations": {
+        "*.erb": "html",
+        "istream": "c",
+        "ostream": "c",
+        "utility": "c",
+        "*.tcc": "c",
+        "fstream": "c",
+        "sstream": "c",
+        "streambuf": "c"
+    }
+}

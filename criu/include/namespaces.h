@@ -230,5 +230,6 @@ extern struct ns_id *lookup_ns_by_kid(unsigned int kid, struct ns_desc *nd);
 #define EXTERNAL_IPC_NS_FD_KEY "extRootIpcNS"
 #define EXTERNAL_UTS_NS_FD_KEY "extRootUtsNS"
 #define EXTERNAL_MNT_NS_FD_KEY "extRootMntNS"
+#define	EXTERNAL_NET_NS_FD_KEY "extRootNetNS"
 
 #endif /* __CR_NS_H__ */
